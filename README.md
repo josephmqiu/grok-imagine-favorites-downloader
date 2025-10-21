@@ -2,6 +2,8 @@
 
 A Chrome extension that downloads all media (images and videos) from your [Grok Imagine](https://grok.com/imagine) favorites page. Perfect for backing up your AI-generated artwork.
 
+If you can't figure something out, [Ask Grok](https://grok.com/share/c2hhcmQtMg%3D%3D_91ffbc8d-e797-4fcd-9f66-7b02fb533f7a).
+
 ## Features
 
 - 📥 **Bulk Download**: Automatically scrolls through your entire favorites gallery and downloads all media
