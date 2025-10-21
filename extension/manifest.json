@@ -9,7 +9,7 @@
   "background": {
     "service_worker": "background.js"
   },
-  "permissions": ["downloads", "scripting", "tabs", "storage"],
+  "permissions": ["downloads", "scripting", "tabs"],
   "host_permissions": [
     "https://grok.com/imagine/*",
     "https://imagine-public.x.ai/*",

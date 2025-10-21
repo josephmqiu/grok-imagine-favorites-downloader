@@ -26,8 +26,7 @@
   const title = document.createElement('h1');
   title.textContent = 'Grok Downloader';
   const subtitle = document.createElement('p');
-  subtitle.innerHTML =
-    'Solve any verification prompts on <strong>https://grok.com/imagine/favorites</strong>, then start the queue.';
+  subtitle.textContent = 'Solve any verification prompts on https://grok.com/imagine/favorites, then start the queue.';
   titleWrap.appendChild(title);
   titleWrap.appendChild(subtitle);
 
@@ -238,7 +237,7 @@
     );
   });
 
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === 'TOGGLE_PANEL') {
       togglePanel();
       sendResponse?.({ ok: true });
