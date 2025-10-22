@@ -11,7 +11,13 @@ const runState = {
   tabId: null,
   history: [],
   progress: { total: 0, completed: 0 },
+  items: [], // Store items with metadata for unfavorite UI
+  retryQueue: [], // Items that failed and need retry
+  retryAttempts: new Map(), // Track retry count per item
 };
+
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 1000;
 
 function resetForPage(tabId) {
   runState.runId += 1;
@@ -25,6 +31,9 @@ function resetForPage(tabId) {
   runState.debug = false;
   runState.progress = { total: 0, completed: 0 };
   runState.history = [];
+  runState.items = [];
+  runState.retryQueue = [];
+  runState.retryAttempts.clear();
   runState.tabId = tabId ?? runState.tabId;
 }
 
@@ -35,6 +44,7 @@ function finalizeRun() {
   runState.results = [];
   runState.sessionFolder = '';
   runState.debug = false;
+  // Keep items for unfavorite UI
 }
 
 function appendHistory(entry) {
@@ -107,7 +117,7 @@ function emitDebugLogs(lines) {
   });
 }
 
-async function handleStart(tabId, debugEnabled) {
+async function handleStart(tabId, debugEnabled, limit = 0) {
   if (runState.active) {
     return { status: 'busy' };
   }
@@ -123,7 +133,14 @@ async function handleStart(tabId, debugEnabled) {
 
   runState.tabId = tabId;
   runState.debug = Boolean(debugEnabled);
-  notify('Scanning favorites grid for media…', 'running');
+  const downloadLimit = parseInt(limit) || 0;
+
+  if (downloadLimit > 0) {
+    notify(`Scanning favorites page (will limit to ${downloadLimit} files for testing)…`, 'running');
+  } else {
+    notify('Scanning favorites page (scrolling and loading all media)…', 'running');
+  }
+
   const favoritesResult = await collectFavorites(tabId).catch((error) => ({
     status: 'error',
     message: error.message || String(error),
@@ -149,8 +166,18 @@ async function handleStart(tabId, debugEnabled) {
     return { status: 'empty' };
   }
 
+  notify(`✓ Found ${favoritesResult.items.length} media items. Preparing download queue…`, 'running');
+
   const sessionFolder = createSessionFolderName();
-  const preparedQueue = prepareQueue(favoritesResult.items, sessionFolder);
+  let itemsToProcess = favoritesResult.items;
+
+  // Apply limit if specified
+  if (downloadLimit > 0 && itemsToProcess.length > downloadLimit) {
+    itemsToProcess = itemsToProcess.slice(0, downloadLimit);
+    notify(`Limited to first ${downloadLimit} items for testing.`, 'running');
+  }
+
+  const preparedQueue = prepareQueue(itemsToProcess, sessionFolder);
   if (preparedQueue.length === 0) {
     notify('Collected media but failed to prepare download queue.', 'error');
     return { status: 'empty' };
@@ -168,7 +195,7 @@ async function handleStart(tabId, debugEnabled) {
   snapshotProgress({ total: runState.total, completed: 0 });
 
   notify(
-    `Queued ${runState.queue.length} files for download in ${sessionFolder}.`,
+    `Starting download of ${runState.queue.length} files to ${sessionFolder}/`,
     'running',
     { total: runState.total, completed: 0 }
   );
@@ -192,20 +219,42 @@ async function processQueue(runId) {
   }
 
   if (runState.index >= runState.queue.length) {
+    // Check if we have items to retry
+    if (runState.retryQueue.length > 0) {
+      notify(`Retrying ${runState.retryQueue.length} failed downloads...`, 'running');
+      await processRetries(runId);
+      return;
+    }
+
     const successes = runState.results.filter((item) => item.success).length;
     const failures = runState.results.length - successes;
     snapshotProgress({ total: runState.total, completed: runState.total });
-    notify(`Finished. Success: ${successes}, Failures: ${failures}.`, 'idle');
+
+    if (failures > 0) {
+      notify(`✓ Downloads complete. Success: ${successes}, Failed: ${failures}.`, 'idle');
+    } else {
+      notify(`✓ All downloads complete! Success: ${successes}.`, 'idle');
+    }
+
     finalizeRun();
+
+    // Show unfavorite UI
+    if (runState.items.length > 0) {
+      sendDownloadsComplete();
+    }
     return;
   }
 
   const item = runState.queue[runState.index];
-  notify(
-    `Downloading ${runState.index + 1} of ${runState.queue.length}…`,
-    'running',
-    { total: runState.total, completed: runState.completed }
-  );
+
+  // Only show "Downloading X of Y" message every 10 files or in debug mode
+  if (runState.debug || runState.index % 10 === 0) {
+    notify(
+      `Downloading ${runState.index + 1} of ${runState.queue.length}…`,
+      'running',
+      { total: runState.total, completed: runState.completed }
+    );
+  }
 
   try {
     const outcome = await downloadAsset(item);
@@ -215,21 +264,42 @@ async function processQueue(runId) {
     }
     runState.completed += 1;
     const progress = snapshotProgress({ total: runState.total, completed: runState.completed });
+
     if (outcome.success) {
-      notify(`✔ Download queued for ${truncate(item.label || item.filename || item.url)}`, 'running', progress);
+      // Only log success in debug mode
+      if (runState.debug) {
+        notify(`✔ Download queued for ${truncate(item.label || item.filename || item.url)}`, 'running', progress);
+      }
     } else {
-      notify(
-        `✖ Failed for ${truncate(item.label || item.filename || item.url)}: ${outcome.message || 'unknown error'}`,
-        'running',
-        progress
-      );
+      // Add to retry queue
+      runState.retryQueue.push(item);
+
+      // Log failure (always show, not just in debug)
+      if (runState.debug) {
+        notify(
+          `✖ Failed: ${truncate(item.label || item.filename || item.url)} - ${outcome.message || 'unknown error'} (will retry)`,
+          'running',
+          progress
+        );
+      } else {
+        notify(
+          `✖ Failed: ${truncate(item.label || item.filename || item.url)} (will retry)`,
+          'running',
+          progress
+        );
+      }
     }
   } catch (error) {
     runState.results.push({ url: item.url, success: false, message: String(error) });
     runState.completed += 1;
     const progress = snapshotProgress({ total: runState.total, completed: runState.completed });
+
+    // Add to retry queue
+    runState.retryQueue.push(item);
+
+    // Always show errors
     notify(
-      `✖ Error processing ${truncate(item.label || item.filename || item.url)}: ${error.message || error}`,
+      `✖ Error: ${truncate(item.label || item.filename || item.url)} - ${error.message || error} (will retry)`,
       'running',
       progress
     );
@@ -239,6 +309,88 @@ async function processQueue(runId) {
   setTimeout(() => {
     void processQueue(runId);
   }, 350);
+}
+
+async function processRetries(runId) {
+  if (!runState.active || runId !== runState.runId) {
+    return;
+  }
+
+  const itemsToRetry = [...runState.retryQueue];
+  runState.retryQueue = [];
+
+  for (const item of itemsToRetry) {
+    if (runId !== runState.runId) {
+      return;
+    }
+
+    const itemKey = item.url;
+    const currentAttempts = runState.retryAttempts.get(itemKey) || 0;
+
+    if (currentAttempts >= MAX_RETRIES) {
+      notify(
+        `✖ Permanently failed: ${truncate(item.label || item.filename || item.url)} (max retries exceeded)`,
+        'running'
+      );
+      continue;
+    }
+
+    runState.retryAttempts.set(itemKey, currentAttempts + 1);
+    const attemptNum = currentAttempts + 1;
+
+    notify(
+      `Retry attempt ${attemptNum}/${MAX_RETRIES} for ${truncate(item.label || item.filename || item.url)}`,
+      'running'
+    );
+
+    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+
+    try {
+      const outcome = await downloadAsset(item);
+
+      if (outcome.success) {
+        notify(`✔ Retry successful for ${truncate(item.label || item.filename || item.url)}`, 'running');
+        // Update the failed result to success
+        const resultIndex = runState.results.findIndex(r => r.url === item.url && !r.success);
+        if (resultIndex !== -1) {
+          runState.results[resultIndex] = { url: item.url, ...outcome };
+        }
+      } else {
+        // Add back to retry queue if not at max retries
+        if (attemptNum < MAX_RETRIES) {
+          runState.retryQueue.push(item);
+        }
+      }
+    } catch (error) {
+      // Add back to retry queue if not at max retries
+      if (attemptNum < MAX_RETRIES) {
+        runState.retryQueue.push(item);
+      }
+    }
+  }
+
+  // If there are still items to retry, process them
+  if (runState.retryQueue.length > 0) {
+    await processRetries(runId);
+  } else {
+    // All retries done, finalize
+    const successes = runState.results.filter((item) => item.success).length;
+    const failures = runState.results.length - successes;
+    snapshotProgress({ total: runState.total, completed: runState.total });
+
+    if (failures > 0) {
+      notify(`✓ Downloads complete. Success: ${successes}, Failed: ${failures}.`, 'idle');
+    } else {
+      notify(`✓ All downloads complete! Success: ${successes}.`, 'idle');
+    }
+
+    finalizeRun();
+
+    // Show unfavorite UI
+    if (runState.items.length > 0) {
+      sendDownloadsComplete();
+    }
+  }
 }
 
 function downloadAsset(item) {
@@ -263,6 +415,139 @@ function downloadAsset(item) {
   });
 }
 
+function sendDownloadsComplete() {
+  const message = {
+    type: 'DOWNLOADS_COMPLETE',
+    items: runState.items.map(item => ({
+      index: item.index,
+      thumbnailUrl: item.thumbnailUrl,
+      filename: item.filename,
+      hasImage: item.hasImage,
+      hasVideo: item.hasVideo,
+      mediaType: item.mediaType,
+    })),
+  };
+  if (runState.tabId != null) {
+    chrome.tabs.sendMessage(runState.tabId, message, () => {
+      void chrome.runtime.lastError;
+    });
+  }
+}
+
+async function executeUnfavorites(tabId, indices) {
+  if (!Array.isArray(indices) || indices.length === 0) {
+    notify('No items selected to unfavorite.', 'error');
+    return;
+  }
+
+  // Map indices to groupIds (position on page, starting from 1)
+  const targetGroupIds = indices.map(idx => runState.items[idx]?.groupId).filter(id => id != null);
+
+  if (targetGroupIds.length === 0) {
+    notify('No valid items to unfavorite.', 'error');
+    return;
+  }
+
+  notify(`Starting unfavorite process for ${targetGroupIds.length} items at positions: ${targetGroupIds.join(', ')}...`, 'running');
+
+  try {
+    const result = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: async (groupIds, clickDelay) => {
+        const wait = (ms) => new Promise(r => setTimeout(r, ms));
+        const logs = [];
+
+        logs.push(`Finding buttons for positions: ${groupIds.join(', ')}`);
+
+        // Find scroll container
+        const allDivs = Array.from(document.querySelectorAll('div'));
+        const scrollContainer = allDivs.find(el => {
+          const style = getComputedStyle(el);
+          return (style.overflowY === 'scroll' || style.overflow === 'scroll') &&
+                 el.scrollHeight > el.clientHeight + 100;
+        });
+
+        if (!scrollContainer) {
+          return { success: 0, failed: groupIds.length, logs: ['No scroll container found'] };
+        }
+
+        // Scroll to top and collect all buttons
+        scrollContainer.scrollTop = 0;
+        await wait(500);
+
+        const collectedButtons = [];
+        const seenButtons = new Set();
+
+        // Scroll through page collecting all buttons
+        for (let attempt = 0; attempt < 100; attempt++) {
+          const buttons = Array.from(document.querySelectorAll('button[aria-label="Unsave"]'));
+          buttons.forEach(btn => {
+            if (!seenButtons.has(btn)) {
+              seenButtons.add(btn);
+              collectedButtons.push(btn);
+            }
+          });
+
+          const step = Math.max(280, Math.floor((window.innerHeight || 900) * 0.85));
+          const oldTop = scrollContainer.scrollTop;
+          const newTop = Math.min(oldTop + step, scrollContainer.scrollHeight - scrollContainer.clientHeight);
+
+          if (newTop === oldTop) break;
+
+          scrollContainer.scrollTop = newTop;
+          await wait(400);
+        }
+
+        logs.push(`Collected ${collectedButtons.length} total buttons`);
+
+        let success = 0;
+        let failed = 0;
+
+        // Click buttons at specified positions
+        for (const groupId of groupIds) {
+          const buttonIndex = groupId - 1; // Convert 1-based to 0-based
+
+          if (buttonIndex < 0 || buttonIndex >= collectedButtons.length) {
+            logs.push(`✗ Position ${groupId}: out of range`);
+            failed++;
+            continue;
+          }
+
+          const button = collectedButtons[buttonIndex];
+          button.scrollIntoView({ block: 'center', behavior: 'instant' });
+          await wait(200);
+          button.click();
+          logs.push(`✓ Clicked position ${groupId}`);
+          success++;
+          await wait(clickDelay);
+        }
+
+        return { success, failed, logs };
+      },
+      args: [targetGroupIds, 120],
+    });
+
+    const output = result[0]?.result || { success: 0, failed: targetGroupIds.length, logs: ['No result returned'] };
+
+    // Show logs
+    if (output.logs) {
+      output.logs.forEach(log => notify(log, 'running'));
+    }
+
+    if (output.success > 0) {
+      notify(`✓ Unfavorited ${output.success} items`, 'idle');
+    }
+    if (output.failed > 0) {
+      notify(`⚠️ ${output.failed} items failed`, 'error');
+    }
+
+    // Reset items after unfavoriting
+    runState.items = [];
+  } catch (error) {
+    notify(`Error during unfavorite: ${error.message || error}`, 'error');
+  }
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'CONTENT_READY') {
     const tabId = sender.tab?.id ?? null;
@@ -285,10 +570,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message?.type === 'START_DOWNLOADS') {
     const tabId = sender.tab?.id ?? null;
-    handleStart(tabId, message.debugEnabled)
+    handleStart(tabId, message.debugEnabled, message.limit)
       .then((result) => sendResponse(result))
       .catch((error) => sendResponse({ status: 'error', message: String(error) }));
     return true;
+  }
+
+  if (message?.type === 'EXECUTE_UNFAVORITES') {
+    const tabId = sender.tab?.id ?? runState.tabId;
+    if (!tabId) {
+      sendResponse({ status: 'error', message: 'No tab ID available' });
+      return false;
+    }
+    executeUnfavorites(tabId, message.indices)
+      .then(() => sendResponse({ status: 'ok' }))
+      .catch((error) => sendResponse({ status: 'error', message: String(error) }));
+    return true;
+  }
+
+  if (message?.type === 'SKIP_UNFAVORITE') {
+    runState.items = [];
+    notify('Skipped unfavorite. All items remain favorited.', 'idle');
+    sendResponse({ status: 'ok' });
+    return false;
   }
 
   return undefined;
@@ -395,6 +699,10 @@ async function scrapeFavorites(debugEnabled = false) {
   const seenUrls = new Set();
   const collectedItems = [];
 
+  // Map to track unique containers and assign stable IDs
+  const containerMap = new Map();
+  let nextContainerId = 0;
+
   const collectVisibleMedia = () => {
     const mediaNodes = Array.from(document.querySelectorAll(mediaSelector));
     mediaNodes.forEach(node => {
@@ -406,15 +714,32 @@ async function scrapeFavorites(debugEnabled = false) {
       const kind = node.tagName.toLowerCase() === 'video' ? 'video' : 'image';
       const poster = kind === 'video' ? (node.poster || node.getAttribute('poster') || '') : '';
 
-      // Find the closest container that groups related media (card/article/section)
-      const container = node.closest('article, section, [role="article"], div[data-testid*="card"], div[class*="card"]') || node.parentElement;
-      const containerId = container ? Array.from(document.body.querySelectorAll('*')).indexOf(container) : -1;
+      // Find the container that has the unfavorite button
+      // Walk up the DOM tree until we find an element with an "Unsave" button
+      let container = node.parentElement;
+      while (container && container !== document.body) {
+        const unsaveButton = container.querySelector('button[aria-label="Unsave"]');
+        if (unsaveButton) {
+          break; // Found the container with the unfavorite button
+        }
+        container = container.parentElement;
+      }
+
+      // If no container found, use the immediate parent
+      if (!container || container === document.body) {
+        container = node.parentElement;
+      }
+
+      // Assign a stable ID to this container
+      let containerId;
+      if (!containerMap.has(container)) {
+        containerId = nextContainerId++;
+        containerMap.set(container, containerId);
+      } else {
+        containerId = containerMap.get(container);
+      }
 
       collectedItems.push({ url, kind, poster, containerId });
-
-      if (collectedItems.length % 50 === 0) {
-        log(`Collected ${collectedItems.length} unique media items so far`);
-      }
     });
   };
 
@@ -517,7 +842,7 @@ async function scrapeFavorites(debugEnabled = false) {
     return { status: 'not_ready', items: [], debug };
   }
 
-  // Group items by container to pair images and videos
+  // Group items by container to pair images and videos that belong to the same favorite
   const containerGroups = new Map();
   collectedItems.forEach((item) => {
     const key = item.containerId;
@@ -527,36 +852,48 @@ async function scrapeFavorites(debugEnabled = false) {
     containerGroups.get(key).push(item);
   });
 
-  // Assign sequential group IDs to each container
-  let groupCounter = 0;
-  const items = [];
+  // Sort containers by containerId to ensure top-to-bottom order
+  // then assign sequential group IDs (1, 2, 3...) to each container
+  const sortedContainers = Array.from(containerGroups.entries()).sort((a, b) => a[0] - b[0]);
 
-  containerGroups.forEach((mediaGroup) => {
-    groupCounter += 1;
+  const items = [];
+  sortedContainers.forEach(([_containerId, mediaGroup], index) => {
+    const groupId = index + 1; // Start from 1 for user-friendly numbering
 
     mediaGroup.forEach((item) => {
       items.push({
         url: item.url,
         kind: item.kind,
-        groupId: groupCounter,
+        groupId: groupId,
         poster: item.poster || ''
       });
     });
   });
 
-  log(`Processed ${items.length} items into ${groupCounter} groups.`);
+  log(`Processed ${items.length} media items into ${sortedContainers.length} favorite groups.`);
+
+  // Debug: log group statistics
+  if (debugEnabled) {
+    const groupSizes = new Map();
+    containerGroups.forEach((mediaGroup) => {
+      const size = mediaGroup.length;
+      groupSizes.set(size, (groupSizes.get(size) || 0) + 1);
+    });
+    log(`Group size distribution: ${Array.from(groupSizes.entries()).map(([size, count]) => `${count} groups with ${size} items`).join(', ')}`);
+  }
+
   return { status: 'ok', items, debug };
 }
 
 function prepareQueue(rawItems, sessionFolder) {
   const usedNames = new Set();
-  const typeCounters = { image: 0, video: 0 };
 
-  return rawItems.map((item) => {
+  // First, build the download queue (one entry per media file)
+  // Use groupId for filename numbering so files match their position on page
+  const queue = rawItems.map((item) => {
     const kind = item.kind === 'video' ? 'video' : item.kind === 'image' ? 'image' : 'other';
-    typeCounters[kind] = (typeCounters[kind] || 0) + 1;
     const extension = deriveExtension(kind, item.url);
-    const base = `${typeCounters[kind]}-${kind}`;
+    const base = `${item.groupId}-${kind}`;
     const uniqueFilename = ensureUnique(`${base}${extension}`, usedNames);
     usedNames.add(uniqueFilename.toLowerCase());
 
@@ -565,8 +902,57 @@ function prepareQueue(rawItems, sessionFolder) {
       kind,
       filename: `${sessionFolder}/${uniqueFilename}`,
       label: uniqueFilename,
+      groupId: item.groupId,
     };
   });
+
+  // Now build unfavorite metadata by grouping (one entry per favorite card)
+  const containerGroups = new Map();
+  rawItems.forEach((item) => {
+    const groupId = item.groupId || 0;
+    if (!containerGroups.has(groupId)) {
+      containerGroups.set(groupId, { image: null, video: null });
+    }
+    const group = containerGroups.get(groupId);
+    if (item.kind === 'image') {
+      group.image = item;
+    } else if (item.kind === 'video') {
+      group.video = item;
+    }
+  });
+
+  // Sort by groupId to match DOM order
+  const sortedGroups = Array.from(containerGroups.entries()).sort((a, b) => a[0] - b[0]);
+
+  const items = [];
+  sortedGroups.forEach(([groupId, group], index) => {
+    const hasImage = !!group.image;
+    const hasVideo = !!group.video;
+    const mediaType = (hasImage && hasVideo) ? 'both' :
+                      (hasImage && !hasVideo) ? 'image-only' :
+                      (!hasImage && hasVideo) ? 'video-only' : 'unknown';
+
+    items.push({
+      index, // This maps to the unfavorite button position (one per favorite card)
+      groupId,
+      imageUrl: group.image?.url || null,
+      videoUrl: group.video?.url || null,
+      thumbnailUrl: group.image?.url || group.video?.url || null,
+      hasImage,
+      hasVideo,
+      mediaType,
+      filename: `Favorite ${groupId}`,
+    });
+  });
+
+  // Store items in runState for later use
+  runState.items = items;
+
+  if (runState.debug) {
+    console.log(`[Grok Downloader] Queue: ${queue.length} files, Unfavorite items: ${items.length} favorites`);
+  }
+
+  return queue;
 }
 
 function deriveExtension(kind, rawUrl) {

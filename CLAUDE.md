@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code (claude.ai/code) when contributing to this repository.
 
 ## Project Overview
 
-A Chrome Manifest V3 extension that downloads all media (images and videos) from a user's Grok Imagine favorites page. The extension runs entirely in the browser, leveraging the user's logged-in session to bypass authentication challenges.
+Chrome Manifest V3 extension that downloads every media asset from a user's Grok Imagine favorites page, retries failed downloads, and optionally unfavorites items once the backup completes. All logic runs locally inside the browser session.
 
 ## Development Workflow
 
@@ -14,104 +14,61 @@ A Chrome Manifest V3 extension that downloads all media (images and videos) from
 3. Click **Load unpacked** and select the `extension/` directory
 4. Chrome hot-reloads files automatically on save
 
-### Testing
-- Navigate to `https://grok.com/imagine/favorites`
-- Solve any verification prompts until the favorites grid is visible
-- Click the extension icon to open the side panel
-- Press **Start Download** and verify:
-  - Progress bar increments correctly
-  - Status log shows detailed metrics (enable debug checkbox for verbose output)
-  - Files download to `grok-favorites/<timestamp>/` folder structure
-- Check `chrome://extensions/?errors=<extension-id>` for runtime errors
-- Verify downloads in `chrome://downloads/`
+### Manual Testing
+- Visit `https://grok.com/imagine/favorites` and solve verification prompts until the grid renders
+- Open the extension panel, optionally toggle debug logs, and set a limit (`0` downloads everything)
+- Press **Start Download** and verify: progress bar increments, retries surface in the log, files write to `grok-favorites/<timestamp>/`
+- After completion, exercise the unfavorite workspace: try the quick filters, run **Unfavorite Selected**, and confirm skipped flows
+- Watch `chrome://extensions/?errors=extension` and `chrome://downloads/` for runtime diagnostics
 
 ## Architecture
 
 ### Component Structure
 
-**[background.js](extension/background.js)** - Service worker (background script)
-- Maintains global download state in `runState` object
-- Orchestrates the download workflow: scraping → queue preparation → sequential downloads
-- Communicates with content script via Chrome messaging API
-- Handles Chrome downloads API interactions
+**Service worker** – `extension/background.js`
+- Maintains global run state (`runState`) with queue tracking, retry bookkeeping, and unfavorite metadata (`items`) (`extension/background.js:1`)
+- `handleStart()` validates tab context, applies optional download limits, and kicks off scraping (`extension/background.js:120`)
+- `processQueue()` streams downloads, records outcomes, and enqueues failures for `processRetries()` (`extension/background.js:216`, `extension/background.js:314`)
+- `sendDownloadsComplete()` packages metadata for the panel's unfavorite UI (`extension/background.js:418`)
+- `executeUnfavorites()` synthesizes clicks on "Unsave" buttons when the user confirms (`extension/background.js:437`)
 
-**[panel.js](extension/panel.js)** - Content script
-- Injects side panel UI into the Grok favorites page
-- Manages panel visibility and user interactions
-- Displays real-time download progress and status history
-- Forwards user actions to background service worker
+**Content script** – `extension/panel.js`
+- Injects the side panel UI, progress widgets, debug toggle, and download limit input (`extension/panel.js:16`)
+- Renders status history, mirrors background progress, and keeps local state for the unfavorite workspace (`extension/panel.js:147`, `extension/panel.js:334`)
+- Provides range/type selection helpers and forwards unfavorite actions back to the service worker (`extension/panel.js:386`, `extension/panel.js:450`)
 
-**[panel.css](extension/panel.css)** - Panel styling
-- Fixed right-side panel (340px width)
-- Dark theme matching Grok's aesthetic
-- Includes progress bar, status log, and control buttons
+**Stylesheet** – `extension/panel.css`
+- Controls fixed-position layout, dark theme, progress bar, and unfavorite grid styling
 
 ### Key Workflows
 
-**Download session initialization** ([background.js:110-178](extension/background.js#L110-L178)):
-1. User clicks "Start Download" in panel
-2. `handleStart()` validates tab state and enables debug mode if requested
-3. Executes `scrapeFavorites()` in page context via `chrome.scripting.executeScript`
-4. Converts scraped items to download queue with unique filenames
-5. Creates timestamped session folder name
-6. Begins sequential download processing
+**Download session**
+1. Panel posts `START_DOWNLOADS` with debug + limit flags
+2. `handleStart()` validates the tab, announces scan mode, executes `scrapeFavorites()`, and prepares filenames (`extension/background.js:120`)
+3. Optional limit truncates the collected items before queue creation (`extension/background.js:174`)
+4. `processQueue()` downloads sequentially, snapshots progress, and queues failures (`extension/background.js:216`)
+5. `processRetries()` loops failed items up to `MAX_RETRIES`, logging success or permanent failure (`extension/background.js:314`)
+6. Completion triggers progress finalization and an unfavorite payload for the panel (`extension/background.js:389`)
 
-**Scraping algorithm** ([background.js:306-676](extension/background.js#L306-L676)):
-- Polls for favorites grid visibility with 40 attempts max
-- Scrolls progressively (85% of viewport height per step) to trigger lazy-loading
-- Detects pagination controls and advances pages automatically (max 20 cycles)
-- Stops when both page height and media count stabilize for 3+ consecutive checks
-- Groups media elements by container (card/article/section) to pair images with videos
-- Derives base filenames from UUID extraction or URL path stems
+**Scraping algorithm** (`extension/background.js:529`)
+- Waits for the favorites grid, performs human-like scroll steps, and advances pagination when the DOM stabilizes
+- Collects visible media, groups cards by container ID, and records whether each favorite contains images, videos, or both
+- Returns structured metadata used to build filenames and feed the unfavorite UI
 
-**Queue processing** ([background.js:189-242](extension/background.js#L189-L242)):
-- Downloads one asset at a time with 350ms delay between items
-- Uses Chrome downloads API with pre-computed filenames
-- Tracks progress and updates panel UI via `sendStatus()` messaging
-- Handles failures gracefully, continuing to next item
-- Finalizes run state when queue exhausts
-
-### State Management
-
-The service worker maintains session state in `runState` object:
-- `active`: Whether a download session is running
-- `queue`: Array of download items with URLs and filenames
-- `sessionFolder`: Timestamped folder path for current session
-- `history`: Rolling log of status messages (max 500 entries)
-- `progress`: `{total, completed}` for UI display
-- `debug`: Whether debug logging is enabled
-
-Panel state syncs via message passing:
-- `REQUEST_STATE`: Panel requests current state on open
-- `STATUS`: Background pushes status updates to panel
-- `START_DOWNLOADS`: User initiates download session
-- `CONTENT_READY`: Panel signals page load/refresh (resets state)
-
-### Helper Functions
-
-**Filename handling**:
-- `deriveBaseName()` ([background.js:521-546](extension/background.js#L521-L546)): Extracts UUID or path stem from asset URLs, falls back to sequential numbering
-- `sanitizeBaseName()` ([background.js:736-743](extension/background.js#L736-L743)): Strips invalid filename characters, max 96 chars
-- `ensureUnique()` ([background.js:719-734](extension/background.js#L719-L734)): Appends `-2`, `-3` etc. to avoid filename collisions
-- `deriveExtension()` ([background.js:699-717](extension/background.js#L699-L717)): Parses extension from URL, defaults to `.mp4` / `.png` / `.bin`
-
-**Status notifications**:
-- `notify()` ([background.js:83-91](extension/background.js#L83-L91)): Sends user-facing status with optional progress
-- `emitDebugLogs()` ([background.js:93-108](extension/background.js#L93-L108)): Batch-sends debug lines when debug mode enabled
-- `sendStatus()` ([background.js:48-66](extension/background.js#L48-L66)): Low-level message dispatcher with history tracking
+**Unfavorite workflow**
+- Panel receives `DOWNLOADS_COMPLETE`, renders selectable cards with filters, and gathers indices (`extension/panel.js:480`)
+- On confirm, posts `EXECUTE_UNFAVORITES`; service worker injects click automation and clears metadata (`extension/background.js:437`)
+- `SKIP_UNFAVORITE` clears state without modifying the page (`extension/background.js:510`)
 
 ## Code Style
 
-- Modern JavaScript: `const`/`let`, arrow functions, early returns
-- 2-space indentation
-- Descriptive variable names (camelCase for locals, kebab-case for assets)
-- Pure helper functions where possible
-- User-facing messages via `notify()` system
+- Modern JavaScript, 2-space indentation, arrow callbacks, early returns
+- Keep helpers pure (`prepareQueue`, `deriveBaseName`, `notify`) and secure (`truncate()` for log output)
+- Message types are uppercase strings (`STATUS`, `DOWNLOADS_COMPLETE`, etc.) – reuse existing enums
 
 ## Debugging Tips
 
-- Enable **debug checkbox** in panel for verbose scroll/pagination/DOM selection logs
-- Check content script console (`DevTools > Console` on active tab) for in-page errors
-- Review service worker logs at `chrome://extensions/?errors=<extension-id>`
-- When DOM selectors break, verify against live favorites page structure (see `mediaSelector` and pagination selectors in `scrapeFavorites()`)
-- Use `truncate()` helper to avoid leaking full asset URLs in logs
+- Enable the panel debug checkbox to surface scroll, pagination, and media count metrics in the console
+- Service worker logs (retries, failures, unfavorite notices) appear in the panel history; check `chrome://extensions/?errors=extension` for stack traces
+- Verify DOM selectors against the live Grok page before changing the scraper; log updates with `log()` inside `scrapeFavorites()`
+- When editing download filenames, ensure paired assets stay grouped and sanitize using the existing helpers

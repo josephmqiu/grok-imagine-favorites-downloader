@@ -106,6 +106,29 @@ body.grok-downloader-panel-open {
   accent-color: #38bdf8;
 }
 
+#grok-downloader-panel .grok-limit-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: #cbd5f5;
+}
+
+#grok-downloader-panel .grok-limit-input input[type='number'] {
+  width: 80px;
+  padding: 4px 8px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 4px;
+  color: #f8fafc;
+  font-size: 0.85rem;
+}
+
+#grok-downloader-panel .grok-limit-input input[type='number']:focus {
+  outline: none;
+  border-color: #38bdf8;
+}
+
 #grok-downloader-panel .grok-progress {
   display: flex;
   flex-direction: column;
@@ -143,14 +166,17 @@ body.grok-downloader-panel-open {
   border-radius: 6px;
   padding: 10px;
   font-size: 0.85rem;
-  line-height: 1.5;
+  line-height: 1.6;
   overflow-y: auto;
+  min-height: 300px;
+  max-height: none;
 }
 
 #grok-downloader-panel .grok-status-entry {
-  margin: 0 0 6px;
+  margin: 0 0 8px;
   white-space: pre-wrap;
   word-break: break-word;
+  padding: 4px 0;
 }
 
 #grok-downloader-panel .grok-status-entry:last-child {
@@ -166,5 +192,224 @@ body.grok-downloader-panel-open {
   font-size: 0.75rem;
   color: #64748b;
   text-align: center;
+}
+
+/* Unfavorite View */
+#grok-downloader-panel .grok-unfavorite-view {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+#grok-downloader-panel .grok-unfavorite-view[hidden] {
+  display: none !important;
+}
+
+#grok-downloader-panel .grok-unfavorite-view h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #4ade80;
+}
+
+#grok-downloader-panel .grok-unfavorite-view p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #cbd5f5;
+}
+
+#grok-downloader-panel .grok-filter-section {
+  background: #1a1a1a;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  flex-shrink: 0;
+}
+
+#grok-downloader-panel .grok-filter-section h4 {
+  margin: 0 0 8px 0;
+  font-size: 0.8rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+#grok-downloader-panel .grok-filter-group {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+#grok-downloader-panel .grok-filter-group:last-child {
+  margin-bottom: 0;
+}
+
+#grok-downloader-panel .grok-filter-group label {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  min-width: 60px;
+}
+
+#grok-downloader-panel .grok-filter-btn {
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  color: #cbd5f5;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+#grok-downloader-panel .grok-filter-btn:hover {
+  background: #3a3a3a;
+  border-color: #666;
+  color: #f8fafc;
+}
+
+#grok-downloader-panel .grok-filter-btn:active {
+  background: #4a4a4a;
+  transform: scale(0.98);
+}
+
+#grok-downloader-panel .grok-selection-info {
+  padding: 8px;
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 6px;
+  text-align: center;
+  font-weight: bold;
+  color: #4ade80;
+  font-size: 0.9rem;
+}
+
+#grok-downloader-panel .grok-items-list {
+  flex: 1;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 6px;
+  overflow-y: auto;
+  min-height: 200px;
+  max-height: 400px;
+}
+
+#grok-downloader-panel .grok-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  transition: background 0.2s;
+}
+
+#grok-downloader-panel .grok-item:last-child {
+  border-bottom: none;
+}
+
+#grok-downloader-panel .grok-item:hover {
+  background: rgba(148, 163, 184, 0.1);
+}
+
+#grok-downloader-panel .grok-unfav-check {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #38bdf8;
+  flex-shrink: 0;
+}
+
+#grok-downloader-panel .grok-thumb {
+  width: 50px;
+  height: 50px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+  background: #1e293b;
+}
+
+#grok-downloader-panel .grok-item-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+  min-width: 0;
+}
+
+#grok-downloader-panel .grok-item-name {
+  font-size: 0.8rem;
+  color: #cbd5f5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#grok-downloader-panel .grok-badge {
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 3px;
+  width: fit-content;
+  font-weight: 600;
+}
+
+#grok-downloader-panel .grok-badge-both {
+  background: #3b82f6;
+  color: white;
+}
+
+#grok-downloader-panel .grok-badge-image-only {
+  background: #10b981;
+  color: white;
+}
+
+#grok-downloader-panel .grok-badge-video-only {
+  background: #8b5cf6;
+  color: white;
+}
+
+#grok-downloader-panel .grok-danger-btn {
+  background: #dc2626;
+  color: white;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+  width: 100%;
+  font-size: 0.95rem;
+  transition: background 0.2s;
+}
+
+#grok-downloader-panel .grok-danger-btn:hover {
+  background: #b91c1c;
+}
+
+#grok-downloader-panel .grok-danger-btn:active {
+  background: #991b1b;
+}
+
+#grok-downloader-panel .grok-skip-btn {
+  background: #374151;
+  color: #cbd5f5;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  width: 100%;
+  font-size: 0.85rem;
+  transition: background 0.2s;
+}
+
+#grok-downloader-panel .grok-skip-btn:hover {
+  background: #4b5563;
+  color: #f8fafc;
+}
+
+#grok-downloader-panel .grok-skip-btn:active {
+  background: #6b7280;
 }
 *** End

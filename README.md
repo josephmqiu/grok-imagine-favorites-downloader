@@ -1,87 +1,78 @@
 # Grok Favorites Downloader
 
-A Chrome extension that downloads all media (images and videos) from your [Grok Imagine](https://grok.com/imagine) favorites page. Perfect for backing up your AI-generated artwork.
+A Chrome extension that scrolls through your [Grok Imagine](https://grok.com/imagine) favorites, downloads every image and video, and optionally helps you unfavorite items once they are backed up.
 
 ## Features
 
-- 📥 **Bulk Download**: Automatically scrolls through your entire favorites gallery and downloads all media
-- 🎨 **Handles Virtual Scrolling**: Collects media as it scrolls to work with Grok's dynamic page loading
-- 📊 **Live Progress Tracking**: Real-time progress bar and status updates
-- 🐛 **Debug Mode**: Optional verbose logging for troubleshooting
-- 🗂️ **Organized Storage**: Files saved in timestamped folders (`grok-favorites/YYYY-MM-DD_HH-MM-SS/`)
-- 🔒 **Privacy First**: No external API calls, runs entirely in your browser
+- 📥 **Bulk Download**: Scroll automation collects the entire favorites grid before queueing downloads.
+- 📊 **Live Progress Tracking**: Background worker snapshots status updates for the side panel and history log.
+- ♻️ **Automatic Retry Loop**: Failed downloads retry up to three times with backoff before being marked permanent.
+- 🔢 **Download Limit Control**: Optional limit input for quick smoke tests without pulling the whole library.
+- 🧮 **Paired Filenames**: Media from the same favorite reuses the stem from `buildFilename()` so related files stay grouped.
+- 🧹 **Post-Run Unfavorite UI**: After downloads finish, select items to unfavorite in bulk with range/type filters.
+- 🔒 **Privacy First**: No external network calls; everything runs in your logged-in browser session.
 
 ## Installation
 
-1. Clone or download this repository
-2. Open Chrome and navigate to `chrome://extensions`
-3. Enable **Developer mode** (toggle in top-right)
-4. Click **Load unpacked** and select the `extension/` folder
-5. The extension icon should appear in your toolbar
+1. Clone or download this repository.
+2. Open Chrome and navigate to `chrome://extensions`.
+3. Enable **Developer mode** (toggle in top-right).
+4. Click **Load unpacked** and select the `extension/` folder.
+5. Pin `Grok Downloader` for easy access.
 
 ## Usage
 
-1. Visit [https://grok.com/imagine/favorites](https://grok.com/imagine/favorites)
-2. Log in and complete any verification challenges
-3. Click the extension icon to open the side panel
-4. *(Optional)* Enable debug logs to see detailed progress
-5. Click **Start Download**
-6. Wait for the extension to scroll through and collect all media
-7. Files will download to your browser's download folder under `grok-favorites/<timestamp>/`
+1. Visit [https://grok.com/imagine/favorites](https://grok.com/imagine/favorites) and resolve any verification prompts.
+2. Click the extension icon to open the side panel.
+3. *(Optional)* Enable debug logs for verbose console output.
+4. *(Optional)* Enter a download limit (`0` keeps all items).
+5. Press **Start Download** and leave the tab focused while the panel scrolls the grid.
+6. Monitor progress in the panel; retries are surfaced in the status feed.
+7. When complete, review the unfavorite workspace to select cards to unsave, or skip to keep everything.
+8. Files land under `grok-favorites/<timestamp>/` in your Downloads folder.
 
 ## How It Works
 
-The extension:
-1. Finds the scrollable container on the Grok favorites page
-2. Scrolls progressively to trigger lazy-loaded content
-3. Collects media URLs as it scrolls (to handle virtual DOM unmounting)
-4. Uses Chrome's downloads API to save each file with a unique filename
-5. Groups related media (images + videos) under shared base names when possible
+1. `background.js` validates the active tab, toggles debug mode, and executes `scrapeFavorites()` in-page.
+2. The scraper performs human-like scrolling, pagination advances, and groups media by favorite card.
+3. Queue preparation enforces unique filenames, pairs related media, and applies the optional limit.
+4. The queue processor streams items through Chrome's downloads API with retry tracking and progress snapshots.
+5. Once every item succeeds or exhausts retries, the panel receives a completion message plus unfavorite metadata.
 
 ## Troubleshooting
 
-**Only getting a few downloads?**
-- Make sure you've scrolled to the top of the page before starting
-- Try enabling debug mode to see what's happening
-- Check `chrome://extensions/?errors=<extension-id>` for errors
+**Only getting a few downloads?** Ensure the favorites grid was visible, try enabling debug logs, and confirm no rate limits in `chrome://extensions/?errors=extension`.
 
-**Extension not working?**
-- Verify you're on `https://grok.com/imagine/favorites`
-- Check that Developer Mode is enabled
-- Try reloading the extension
+**Stuck on "Scanning favorites"?** Scroll the page manually once, refresh, and re-run; the scraper needs the grid root to mount.
+
+**Need to retry a handful of failures?** They will automatically cycle up to three times; check the status feed for permanent failures.
 
 ## Technical Details
 
-- **Manifest Version**: 3
-- **Permissions**: `downloads`, `scripting`, `tabs`
-- **Host Permissions**: `grok.com/imagine/*`, `imagine-public.x.ai/*`, `assets.grok.com/*`
-- **File Size**: ~900 lines of vanilla JavaScript
-- **Dependencies**: None
+- **Manifest Version**: 3 service worker extension
+- **Background**: `extension/background.js` (~930 lines) orchestrates scraping, retries, unfavorite messaging
+- **Content Script**: `extension/panel.js` (~520 lines) renders the side panel, progress UI, and unfavorite workspace
+- **Styling**: `extension/panel.css` (~415 lines)
+- **Dependencies**: None (plain JavaScript, no build step)
 
 ## Privacy & Security
 
-- ✅ No external API calls or analytics
-- ✅ No data collection or tracking
-- ✅ Runs entirely in your browser
-- ✅ Only accesses Grok URLs you're already logged into
-- ✅ Open source - review the code yourself
+- No analytics, telemetry, or off-domain requests
+- Only operates on Grok Imagine URLs while the panel is open
+- Unfavorite automation simply clicks the page's existing "Unsave" buttons
+- Downloaded files stay local under the `grok-favorites/` directory tree
 
 ## Contributing
 
-Contributions welcome! Please:
-- Test your changes thoroughly with the manual test flow
-- Follow the existing code style (2-space indentation, modern JS)
-- Add debug logging for new features
-- Update CLAUDE.md if adding significant functionality
+- Follow the 2-space indentation, modern JS style, and pure helper patterns
+- Run a manual download pass (limit to a small number if needed) and exercise the unfavorite UI
+- Capture relevant debug console output when adjusting selectors
+- Update documentation (`README.md`, `AGENTS.md`, `CLAUDE.md`, `SECURITY.md`) when behavior changes
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details
+MIT License – see [LICENSE](LICENSE) for details.
 
 ## Disclaimer
 
-This is an unofficial tool not affiliated with X.AI or Grok. Use responsibly and in accordance with Grok's Terms of Service. You are responsible for ensuring you have the right to download the content.
-
-## Credits
-
-Built for personal use to backup AI-generated artwork. If Grok adds an official bulk export feature, please use that instead!
+This is an unofficial tool not affiliated with X.AI or Grok. Respect Grok's Terms of Service and confirm you have rights to download and unfavorite content.
