@@ -1,19 +1,33 @@
+/* Grok Downloader Panel - Matching Grok.com Design System */
+:root {
+  --grok-bg-primary: #000000;
+  --grok-bg-secondary: #151515;
+  --grok-bg-tertiary: #1f1f1f;
+  --grok-bg-elevated: #2b2b2b;
+  --grok-text-primary: #f9f9f9;
+  --grok-text-muted: #7e7e7e;
+  --grok-accent: #ff3d00;
+  --grok-accent-hover: #fe5d44;
+  --grok-border: #1f1f1f;
+  --grok-border-subtle: rgba(255, 255, 255, 0.08);
+}
+
 #grok-downloader-panel {
   position: fixed;
   top: 0;
   right: 0;
   width: 340px;
   height: 100vh;
-  background: #0f172a;
-  color: #f8fafc;
-  box-shadow: -6px 0 18px rgba(15, 23, 42, 0.35);
-  border-left: 1px solid rgba(148, 163, 184, 0.35);
+  background: var(--grok-bg-primary);
+  color: var(--grok-text-primary);
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.6);
+  border-left: 1px solid var(--grok-border);
   display: flex;
   flex-direction: column;
   transform: translateX(100%);
-  transition: transform 0.28s ease;
+  transition: transform 0.25s ease;
   z-index: 2147483600;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   pointer-events: none;
 }
 
@@ -24,148 +38,202 @@
 
 body.grok-downloader-panel-open {
   margin-right: 340px;
-  transition: margin-right 0.28s ease;
+  transition: margin-right 0.25s ease;
 }
 
 #grok-downloader-panel .grok-panel-inner {
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 16px;
+  padding: 20px;
   gap: 16px;
 }
 
+/* Header */
 #grok-downloader-panel .grok-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--grok-border);
 }
 
 #grok-downloader-panel .grok-header h1 {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--grok-text-primary);
+  letter-spacing: -0.01em;
 }
 
 #grok-downloader-panel .grok-header p {
-  margin: 4px 0 0;
-  font-size: 0.85rem;
-  color: #cbd5f5;
-  line-height: 1.4;
+  margin: 6px 0 0;
+  font-size: 0.8rem;
+  color: var(--grok-text-muted);
+  line-height: 1.5;
 }
 
+/* Base button styles */
 #grok-downloader-panel button {
-  background: #2563eb;
-  color: #f8fafc;
+  background: var(--grok-text-primary);
+  color: var(--grok-bg-primary);
   border: none;
   padding: 10px 16px;
-  border-radius: 6px;
-  font-size: 0.95rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
   cursor: pointer;
-  transition: background 0.2s ease;
+  transition: all 0.15s ease;
 }
 
 #grok-downloader-panel button:hover:not([disabled]) {
-  background: #1d4ed8;
+  background: #e0e0e0;
+}
+
+#grok-downloader-panel button:active:not([disabled]) {
+  transform: scale(0.98);
 }
 
 #grok-downloader-panel button[disabled] {
-  opacity: 0.6;
-  cursor: default;
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
+/* Close button */
 #grok-downloader-panel .grok-close {
-  background: none;
-  color: #94a3b8;
-  font-size: 1.2rem;
+  background: transparent;
+  color: var(--grok-text-muted);
+  font-size: 1.25rem;
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: 6px;
+  line-height: 1;
 }
 
 #grok-downloader-panel .grok-close:hover {
-  background: rgba(148, 163, 184, 0.2);
+  background: var(--grok-bg-tertiary);
+  color: var(--grok-text-primary);
 }
 
+/* Controls section */
 #grok-downloader-panel .grok-controls {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 #grok-downloader-panel .grok-debug-toggle {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   font-size: 0.8rem;
-  color: #cbd5f5;
+  color: var(--grok-text-muted);
 }
 
 #grok-downloader-panel .grok-debug-toggle input[type='checkbox'] {
   width: 16px;
   height: 16px;
-  accent-color: #38bdf8;
+  accent-color: var(--grok-accent);
+  cursor: pointer;
+}
+
+#grok-downloader-panel .grok-media-type {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.8rem;
+  color: var(--grok-text-muted);
+}
+
+#grok-downloader-panel .grok-media-type select {
+  padding: 8px 12px;
+  background: var(--grok-bg-secondary);
+  border: 1px solid var(--grok-border);
+  border-radius: 8px;
+  color: var(--grok-text-primary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+#grok-downloader-panel .grok-media-type select:hover {
+  border-color: var(--grok-bg-elevated);
+}
+
+#grok-downloader-panel .grok-media-type select:focus {
+  outline: none;
+  border-color: var(--grok-text-muted);
 }
 
 #grok-downloader-panel .grok-limit-input {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   font-size: 0.8rem;
-  color: #cbd5f5;
+  color: var(--grok-text-muted);
 }
 
 #grok-downloader-panel .grok-limit-input input[type='number'] {
   width: 80px;
-  padding: 4px 8px;
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(148, 163, 184, 0.3);
-  border-radius: 4px;
-  color: #f8fafc;
-  font-size: 0.85rem;
+  padding: 8px 12px;
+  background: var(--grok-bg-secondary);
+  border: 1px solid var(--grok-border);
+  border-radius: 8px;
+  color: var(--grok-text-primary);
+  font-size: 0.8rem;
+  transition: border-color 0.15s;
+}
+
+#grok-downloader-panel .grok-limit-input input[type='number']:hover {
+  border-color: var(--grok-bg-elevated);
 }
 
 #grok-downloader-panel .grok-limit-input input[type='number']:focus {
   outline: none;
-  border-color: #38bdf8;
+  border-color: var(--grok-text-muted);
 }
 
+/* Progress bar */
 #grok-downloader-panel .grok-progress {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(148, 163, 184, 0.3);
-  border-radius: 6px;
-  padding: 8px;
-  font-size: 0.8rem;
+  gap: 8px;
+  background: var(--grok-bg-secondary);
+  border: 1px solid var(--grok-border);
+  border-radius: 8px;
+  padding: 12px;
 }
 
 #grok-downloader-panel .grok-progress-track {
-  height: 10px;
-  border-radius: 4px;
-  background: rgba(148, 163, 184, 0.25);
+  height: 6px;
+  border-radius: 3px;
+  background: var(--grok-bg-tertiary);
   overflow: hidden;
 }
 
 #grok-downloader-panel .grok-progress-fill {
   height: 100%;
   width: 0;
-  background: linear-gradient(90deg, #38bdf8, #2563eb);
-  transition: width 0.2s ease;
+  background: var(--grok-accent);
+  border-radius: 3px;
+  transition: width 0.25s ease;
 }
 
 #grok-downloader-panel .grok-progress-label {
   text-align: right;
-  color: #cbd5f5;
+  color: var(--grok-text-muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
 }
 
+/* Status log */
 #grok-downloader-panel .grok-status {
   flex: 1;
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(148, 163, 184, 0.3);
-  border-radius: 6px;
-  padding: 10px;
-  font-size: 0.85rem;
+  background: var(--grok-bg-secondary);
+  border: 1px solid var(--grok-border);
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 0.8rem;
   line-height: 1.6;
   overflow-y: auto;
   min-height: 300px;
@@ -176,240 +244,52 @@ body.grok-downloader-panel-open {
   margin: 0 0 8px;
   white-space: pre-wrap;
   word-break: break-word;
-  padding: 4px 0;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: transparent;
+  transition: background 0.1s;
 }
 
 #grok-downloader-panel .grok-status-entry:last-child {
   margin-bottom: 0;
 }
 
+#grok-downloader-panel .grok-status-entry:hover {
+  background: var(--grok-bg-tertiary);
+}
+
 #grok-downloader-panel .grok-status-entry.debug {
-  color: #38bdf8;
-  font-size: 0.8rem;
+  color: var(--grok-text-muted);
+  font-size: 0.75rem;
 }
 
+#grok-downloader-panel .grok-status-entry.error {
+  color: var(--grok-accent);
+}
+
+/* Footer */
 #grok-downloader-panel .grok-footer {
-  font-size: 0.75rem;
-  color: #64748b;
-  text-align: center;
-}
-
-/* Unfavorite View */
-#grok-downloader-panel .grok-unfavorite-view {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  height: 100%;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-
-#grok-downloader-panel .grok-unfavorite-view[hidden] {
-  display: none !important;
-}
-
-#grok-downloader-panel .grok-unfavorite-view h3 {
-  margin: 0;
-  font-size: 1.1rem;
-  color: #4ade80;
-}
-
-#grok-downloader-panel .grok-unfavorite-view p {
-  margin: 0;
-  font-size: 0.9rem;
-  color: #cbd5f5;
-}
-
-#grok-downloader-panel .grok-filter-section {
-  background: #1a1a1a;
-  padding: 10px;
-  border-radius: 8px;
-  border: 1px solid rgba(148, 163, 184, 0.3);
-  flex-shrink: 0;
-}
-
-#grok-downloader-panel .grok-filter-section h4 {
-  margin: 0 0 8px 0;
-  font-size: 0.8rem;
-  color: #94a3b8;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-#grok-downloader-panel .grok-filter-group {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-#grok-downloader-panel .grok-filter-group:last-child {
-  margin-bottom: 0;
-}
-
-#grok-downloader-panel .grok-filter-group label {
-  font-size: 0.75rem;
-  color: #94a3b8;
-  min-width: 60px;
-}
-
-#grok-downloader-panel .grok-filter-btn {
-  padding: 4px 10px;
-  font-size: 0.75rem;
-  background: #2a2a2a;
-  border: 1px solid #444;
-  color: #cbd5f5;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-#grok-downloader-panel .grok-filter-btn:hover {
-  background: #3a3a3a;
-  border-color: #666;
-  color: #f8fafc;
-}
-
-#grok-downloader-panel .grok-filter-btn:active {
-  background: #4a4a4a;
-  transform: scale(0.98);
-}
-
-#grok-downloader-panel .grok-selection-info {
-  padding: 8px;
-  background: rgba(34, 197, 94, 0.15);
-  border: 1px solid rgba(34, 197, 94, 0.3);
-  border-radius: 6px;
-  text-align: center;
-  font-weight: bold;
-  color: #4ade80;
-  font-size: 0.9rem;
-}
-
-#grok-downloader-panel .grok-items-list {
-  flex: 1;
-  background: rgba(15, 23, 42, 0.6);
-  border: 1px solid rgba(148, 163, 184, 0.3);
-  border-radius: 6px;
-  overflow-y: auto;
-  min-height: 200px;
-  max-height: 400px;
-}
-
-#grok-downloader-panel .grok-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
-  transition: background 0.2s;
-}
-
-#grok-downloader-panel .grok-item:last-child {
-  border-bottom: none;
-}
-
-#grok-downloader-panel .grok-item:hover {
-  background: rgba(148, 163, 184, 0.1);
-}
-
-#grok-downloader-panel .grok-unfav-check {
-  width: 18px;
-  height: 18px;
-  cursor: pointer;
-  accent-color: #38bdf8;
-  flex-shrink: 0;
-}
-
-#grok-downloader-panel .grok-thumb {
-  width: 50px;
-  height: 50px;
-  object-fit: cover;
-  border-radius: 4px;
-  flex-shrink: 0;
-  background: #1e293b;
-}
-
-#grok-downloader-panel .grok-item-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  overflow: hidden;
-  min-width: 0;
-}
-
-#grok-downloader-panel .grok-item-name {
-  font-size: 0.8rem;
-  color: #cbd5f5;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-#grok-downloader-panel .grok-badge {
   font-size: 0.7rem;
-  padding: 2px 6px;
+  color: var(--grok-text-muted);
+  text-align: center;
+  padding-top: 12px;
+  border-top: 1px solid var(--grok-border);
+}
+
+/* Scrollbar - minimal */
+#grok-downloader-panel ::-webkit-scrollbar {
+  width: 6px;
+}
+
+#grok-downloader-panel ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#grok-downloader-panel ::-webkit-scrollbar-thumb {
+  background: var(--grok-bg-elevated);
   border-radius: 3px;
-  width: fit-content;
-  font-weight: 600;
 }
 
-#grok-downloader-panel .grok-badge-both {
-  background: #3b82f6;
-  color: white;
+#grok-downloader-panel ::-webkit-scrollbar-thumb:hover {
+  background: var(--grok-text-muted);
 }
-
-#grok-downloader-panel .grok-badge-image-only {
-  background: #10b981;
-  color: white;
-}
-
-#grok-downloader-panel .grok-badge-video-only {
-  background: #8b5cf6;
-  color: white;
-}
-
-#grok-downloader-panel .grok-danger-btn {
-  background: #dc2626;
-  color: white;
-  padding: 10px 16px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: bold;
-  width: 100%;
-  font-size: 0.95rem;
-  transition: background 0.2s;
-}
-
-#grok-downloader-panel .grok-danger-btn:hover {
-  background: #b91c1c;
-}
-
-#grok-downloader-panel .grok-danger-btn:active {
-  background: #991b1b;
-}
-
-#grok-downloader-panel .grok-skip-btn {
-  background: #374151;
-  color: #cbd5f5;
-  padding: 8px 16px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  width: 100%;
-  font-size: 0.85rem;
-  transition: background 0.2s;
-}
-
-#grok-downloader-panel .grok-skip-btn:hover {
-  background: #4b5563;
-  color: #f8fafc;
-}
-
-#grok-downloader-panel .grok-skip-btn:active {
-  background: #6b7280;
-}
-*** End

@@ -1,16 +1,16 @@
 (() => {
-  if (window.__grokDownloaderPanelInjected) {
+  // Versioned injection guard prevents conflicts with older versions
+  const INJECTED_KEY = '__grokDownloaderInjected_v1__';
+  if (window[INJECTED_KEY]) {
     return;
   }
-  window.__grokDownloaderPanelInjected = true;
+  window[INJECTED_KEY] = true;
 
   const state = {
     open: false,
     working: false,
     history: [],
     progress: { total: 0, completed: 0 },
-    allItems: [], // Store items for unfavorite selection
-    showingUnfavoriteUI: false,
   };
 
   const panel = document.createElement('aside');
@@ -55,6 +55,28 @@
   debugLabel.appendChild(debugCheckbox);
   debugLabel.appendChild(debugText);
 
+  const mediaTypeLabel = document.createElement('label');
+  mediaTypeLabel.className = 'grok-media-type';
+  const mediaTypeText = document.createElement('span');
+  mediaTypeText.textContent = 'Media type:';
+  const mediaTypeSelect = document.createElement('select');
+  mediaTypeSelect.id = 'grok-media-type';
+  const optAll = document.createElement('option');
+  optAll.value = 'all';
+  optAll.textContent = 'All';
+  optAll.selected = true;
+  const optImages = document.createElement('option');
+  optImages.value = 'image';
+  optImages.textContent = 'Images only';
+  const optVideos = document.createElement('option');
+  optVideos.value = 'video';
+  optVideos.textContent = 'Videos only';
+  mediaTypeSelect.appendChild(optAll);
+  mediaTypeSelect.appendChild(optImages);
+  mediaTypeSelect.appendChild(optVideos);
+  mediaTypeLabel.appendChild(mediaTypeText);
+  mediaTypeLabel.appendChild(mediaTypeSelect);
+
   const limitLabel = document.createElement('label');
   limitLabel.className = 'grok-limit-input';
   const limitText = document.createElement('span');
@@ -74,6 +96,7 @@
   startButton.textContent = 'Start Download';
 
   controls.appendChild(debugLabel);
+  controls.appendChild(mediaTypeLabel);
   controls.appendChild(limitLabel);
   controls.appendChild(startButton);
 
@@ -100,34 +123,6 @@
   footer.className = 'grok-footer';
   footer.textContent = 'Downloads will be saved under grok-favorites/<timestamp>/ via Chrome downloads.';
   inner.appendChild(footer);
-
-  // Unfavorite View (hidden initially)
-  const unfavoriteView = document.createElement('div');
-  unfavoriteView.id = 'grok-unfavorite-view';
-  unfavoriteView.className = 'grok-unfavorite-view';
-  unfavoriteView.hidden = true;
-  unfavoriteView.innerHTML = `
-    <h3>✓ Downloads Complete!</h3>
-    <p><span id="grok-total-count">0</span> favorites downloaded successfully.</p>
-
-    <div class="grok-unfav-options">
-      <label>Unfavorite:</label>
-      <div class="grok-filter-group">
-        <button id="grok-unfav-all" class="grok-filter-btn" type="button">All</button>
-        <button id="grok-unfav-first-100" class="grok-filter-btn" type="button">First 100</button>
-        <button id="grok-unfav-first-200" class="grok-filter-btn" type="button">First 200</button>
-        <button id="grok-unfav-first-300" class="grok-filter-btn" type="button">First 300</button>
-      </div>
-      <div class="grok-filter-group">
-        <button id="grok-unfav-last-100" class="grok-filter-btn" type="button">Last 100</button>
-        <button id="grok-unfav-last-200" class="grok-filter-btn" type="button">Last 200</button>
-        <button id="grok-unfav-last-300" class="grok-filter-btn" type="button">Last 300</button>
-      </div>
-    </div>
-
-    <button id="grok-skip-unfavorite" class="grok-skip-btn" type="button">Skip (Keep All Favorited)</button>
-  `;
-  inner.appendChild(unfavoriteView);
 
   document.body.appendChild(panel);
 
@@ -196,13 +191,6 @@
     panel.classList.toggle('open', open);
     document.body.classList.toggle('grok-downloader-panel-open', open);
     if (open) {
-      // Ensure unfavorite view is hidden when opening panel
-      if (!state.showingUnfavoriteUI) {
-        unfavoriteView.hidden = true;
-        controls.hidden = false;
-        statusBox.hidden = false;
-        footer.hidden = false;
-      }
       renderHistory();
       if (state.history.length) {
         statusBox.scrollTop = statusBox.scrollHeight;
@@ -240,11 +228,13 @@
     }
     setWorking(true);
     const limit = parseInt(limitInput.value) || 0;
+    const mediaType = mediaTypeSelect.value;
     chrome.runtime.sendMessage(
       {
         type: 'START_DOWNLOADS',
         debugEnabled: Boolean(debugCheckbox.checked),
         limit: limit,
+        mediaType: mediaType,
       },
       (response) => {
         if (chrome.runtime.lastError) {
@@ -290,144 +280,9 @@
     );
   });
 
-  // Unfavorite UI functions
-  function formatMediaType(type) {
-    const labels = {
-      'both': '🖼️ + 🎬',
-      'image-only': '🖼️ only',
-      'video-only': '🎬 only'
-    };
-    return labels[type] || type;
-  }
-
-  function showUnfavoriteView(items) {
-    if (!items || items.length === 0) {
-      return; // Don't show unfavorite UI if no items
-    }
-
-    state.allItems = items;
-    state.showingUnfavoriteUI = true;
-
-    // Hide download view elements (but keep statusBox visible for logs)
-    controls.hidden = true;
-    progressContainer.hidden = true;
-    footer.hidden = true;
-
-    // Show unfavorite view
-    unfavoriteView.hidden = false;
-
-    // Update count
-    unfavoriteView.querySelector('#grok-total-count').textContent = items.length;
-
-    // Attach event listeners
-    setupUnfavoriteEventListeners();
-  }
-
-  function hideUnfavoriteView() {
-    state.showingUnfavoriteUI = false;
-    state.allItems = [];
-
-    // Show download view elements
-    controls.hidden = false;
-    statusBox.hidden = false;
-    footer.hidden = false;
-
-    // Hide unfavorite view
-    unfavoriteView.hidden = true;
-  }
-
-  function setupUnfavoriteEventListeners() {
-    const executeUnfavorite = (indices, description) => {
-      if (indices.length === 0) {
-        pushHistory({ text: 'No items to unfavorite', state: 'error', timestamp: Date.now() });
-        return;
-      }
-
-      pushHistory({ text: `Starting unfavorite for ${description} (${indices.length} items)...`, state: 'info', timestamp: Date.now() });
-
-      chrome.runtime.sendMessage({
-        type: 'EXECUTE_UNFAVORITES',
-        indices: indices
-      }, (response) => {
-        if (chrome.runtime.lastError || response?.status === 'error') {
-          const errorMsg = chrome.runtime.lastError?.message || response?.message || 'Unknown error';
-          pushHistory({ text: `Error: ${errorMsg}`, state: 'error', timestamp: Date.now() });
-          return;
-        }
-
-        pushHistory({
-          text: `✓ Unfavorite complete`,
-          state: 'info',
-          timestamp: Date.now(),
-        });
-
-        hideUnfavoriteView();
-      });
-    };
-
-    // Unfavorite All
-    unfavoriteView.querySelector('#grok-unfav-all').addEventListener('click', () => {
-      const allIndices = Array.from({ length: state.allItems.length }, (_, i) => i);
-      executeUnfavorite(allIndices, 'all');
-    });
-
-    // Unfavorite First X
-    unfavoriteView.querySelector('#grok-unfav-first-100').addEventListener('click', () => {
-      const indices = Array.from({ length: Math.min(100, state.allItems.length) }, (_, i) => i);
-      executeUnfavorite(indices, 'first 100');
-    });
-
-    unfavoriteView.querySelector('#grok-unfav-first-200').addEventListener('click', () => {
-      const indices = Array.from({ length: Math.min(200, state.allItems.length) }, (_, i) => i);
-      executeUnfavorite(indices, 'first 200');
-    });
-
-    unfavoriteView.querySelector('#grok-unfav-first-300').addEventListener('click', () => {
-      const indices = Array.from({ length: Math.min(300, state.allItems.length) }, (_, i) => i);
-      executeUnfavorite(indices, 'first 300');
-    });
-
-    // Unfavorite Last X
-    unfavoriteView.querySelector('#grok-unfav-last-100').addEventListener('click', () => {
-      const count = Math.min(100, state.allItems.length);
-      const startIndex = state.allItems.length - count;
-      const indices = Array.from({ length: count }, (_, i) => startIndex + i);
-      executeUnfavorite(indices, 'last 100');
-    });
-
-    unfavoriteView.querySelector('#grok-unfav-last-200').addEventListener('click', () => {
-      const count = Math.min(200, state.allItems.length);
-      const startIndex = state.allItems.length - count;
-      const indices = Array.from({ length: count }, (_, i) => startIndex + i);
-      executeUnfavorite(indices, 'last 200');
-    });
-
-    unfavoriteView.querySelector('#grok-unfav-last-300').addEventListener('click', () => {
-      const count = Math.min(300, state.allItems.length);
-      const startIndex = state.allItems.length - count;
-      const indices = Array.from({ length: count }, (_, i) => startIndex + i);
-      executeUnfavorite(indices, 'last 300');
-    });
-
-    // Skip button
-    unfavoriteView.querySelector('#grok-skip-unfavorite').addEventListener('click', () => {
-      chrome.runtime.sendMessage({ type: 'SKIP_UNFAVORITE' }, () => {
-        void chrome.runtime.lastError;
-        hideUnfavoriteView();
-      });
-    });
-  }
-
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === 'TOGGLE_PANEL') {
       togglePanel();
-      sendResponse?.({ ok: true });
-      return true;
-    }
-    if (message?.type === 'DOWNLOADS_COMPLETE') {
-      if (Array.isArray(message.items) && message.items.length > 0) {
-        showUnfavoriteView(message.items);
-      }
       sendResponse?.({ ok: true });
       return true;
     }
