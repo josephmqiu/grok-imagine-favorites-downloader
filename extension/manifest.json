@@ -1,10 +1,21 @@
 {
   "manifest_version": 3,
   "name": "Grok Favorites Downloader",
-  "description": "Collect and download Grok Imagine favorites directly from the favorites page.",
+  "description": "Bulk download images and videos from your Grok Imagine favorites page.",
   "version": "0.3.0",
+  "icons": {
+    "16": "icon16.png",
+    "32": "icon32.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
   "action": {
-    "default_title": "Grok Downloader"
+    "default_title": "Grok Downloader",
+    "default_icon": {
+      "16": "icon16.png",
+      "32": "icon32.png",
+      "48": "icon48.png"
+    }
   },
   "background": {
     "service_worker": "background.js"
