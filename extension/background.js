@@ -30,7 +30,7 @@ const runState = {
  *
  * Patterns:
  * - imagine-public.x.ai CDN: Remove /cdn-cgi/image/width=X,fit=...,format=auto/
- * - assets.grok.com: Replace preview_image.jpg with image.png
+ * - assets.grok.com: URLs are used as-is (auth cookies handle access)
  */
 function transformToOriginalUrl(url) {
   if (!url) return url;
@@ -40,14 +40,6 @@ function transformToOriginalUrl(url) {
   // To:   https://imagine-public.x.ai/imagine-public/images/ID.png
   if (url.includes('imagine-public.x.ai') && url.includes('/cdn-cgi/image/')) {
     const transformed = url.replace(/\/cdn-cgi\/image\/[^/]+\//, '/');
-    return transformed;
-  }
-
-  // Handle assets.grok.com preview URLs
-  // From: https://assets.grok.com/.../preview_image.jpg?cache=1
-  // To:   https://assets.grok.com/.../image.png?cache=1
-  if (url.includes('assets.grok.com') && url.includes('/preview_image.jpg')) {
-    const transformed = url.replace('/preview_image.jpg', '/image.png');
     return transformed;
   }
 
@@ -420,31 +412,67 @@ async function processRetries(runId) {
   finalizeRun();
 }
 
+/**
+ * Download an asset by fetching it through the content script (which has page
+ * cookies) and then saving the resulting blob via chrome.downloads.
+ *
+ * assets.grok.com requires authentication cookies that chrome.downloads.download()
+ * does not send on its own. By fetching inside the page context we get the
+ * browser's cookie jar for free, then hand a blob URL to the downloads API.
+ */
 function downloadAsset(item) {
   return new Promise((resolve) => {
-    const options = { url: item.url };
-    if (item.filename) {
-      options.filename = item.filename;
-      options.saveAs = false;
-    }
-
-    // Add timeout to prevent indefinite hanging
     const timeout = setTimeout(() => {
       resolve({ success: false, message: `Download timed out after ${CONFIG.DOWNLOAD_TIMEOUT_MS / 1000}s` });
     }, CONFIG.DOWNLOAD_TIMEOUT_MS);
 
-    chrome.downloads.download(options, (downloadId) => {
+    if (runState.tabId == null) {
       clearTimeout(timeout);
-      if (chrome.runtime.lastError) {
-        resolve({ success: false, message: chrome.runtime.lastError.message || 'Download API error.' });
-        return;
+      resolve({ success: false, message: 'No active tab for authenticated fetch.' });
+      return;
+    }
+
+    // Ask the content script to fetch the file with page credentials
+    chrome.tabs.sendMessage(
+      runState.tabId,
+      { type: 'FETCH_BLOB', url: item.url },
+      (response) => {
+        if (chrome.runtime.lastError || !response) {
+          clearTimeout(timeout);
+          resolve({
+            success: false,
+            message: chrome.runtime.lastError?.message || 'Content script fetch failed.',
+          });
+          return;
+        }
+
+        if (!response.ok) {
+          clearTimeout(timeout);
+          resolve({ success: false, message: response.error || 'Fetch returned error.' });
+          return;
+        }
+
+        // Save the blob URL via chrome.downloads
+        const options = { url: response.blobUrl };
+        if (item.filename) {
+          options.filename = item.filename;
+          options.saveAs = false;
+        }
+
+        chrome.downloads.download(options, (downloadId) => {
+          clearTimeout(timeout);
+          if (chrome.runtime.lastError) {
+            resolve({ success: false, message: chrome.runtime.lastError.message || 'Download API error.' });
+            return;
+          }
+          if (typeof downloadId !== 'number') {
+            resolve({ success: false, message: 'Download did not start (no ID returned).' });
+            return;
+          }
+          resolve({ success: true, message: `Download started (ID ${downloadId}).` });
+        });
       }
-      if (typeof downloadId !== 'number') {
-        resolve({ success: false, message: 'Download did not start (no ID returned).' });
-        return;
-      }
-      resolve({ success: true, message: `Download started (ID ${downloadId}).` });
-    });
+    );
   });
 }
 
