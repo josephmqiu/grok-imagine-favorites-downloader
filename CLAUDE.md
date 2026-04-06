@@ -15,7 +15,7 @@ Chrome Manifest V3 extension that downloads every media asset from a user's Grok
 4. Chrome hot-reloads files automatically on save
 
 ### Manual Testing
-- Visit `https://grok.com/imagine/favorites` and solve verification prompts until the grid renders
+- Visit `https://grok.com/imagine/saved` and solve verification prompts until the grid renders
 - Open the extension panel, optionally toggle debug logs, and set a limit (`0` downloads everything)
 - Press **Start Download** and verify: progress bar increments, retries surface in the log, files write to `grok-favorites/<timestamp>/`
 - Watch `chrome://extensions/?errors=extension` and `chrome://downloads/` for runtime diagnostics
@@ -30,11 +30,12 @@ Chrome Manifest V3 extension that downloads every media asset from a user's Grok
 - `handleStart()` validates tab context, applies optional download limits, and kicks off scraping
 - `processQueue()` streams downloads, records outcomes, and enqueues failures for `processRetries()`
 - `processRetries()` uses a while loop (not recursion) to retry failed items up to `MAX_RETRIES`
-- `downloadAsset()` wraps Chrome downloads API with 30-second timeout
+- `downloadAsset()` sends a `FETCH_BLOB` message to the content script, which fetches the file with page cookies and returns a blob URL for `chrome.downloads`
 
 **Content script** – `extension/panel.js` (323 lines)
 - Injects the side panel UI with progress widgets, debug toggle, media type filter, and download limit input
 - Renders status history and mirrors background progress
+- Handles `FETCH_BLOB` messages: fetches URLs with page credentials and returns blob URLs for authenticated downloads
 - Uses versioned injection guard (`__grokDownloaderInjected_v1__`) to prevent duplicate injection
 
 **Stylesheet** – `extension/panel.css` (295 lines)
@@ -54,13 +55,13 @@ Chrome Manifest V3 extension that downloads every media asset from a user's Grok
 **Scraping algorithm** (`scrapeFavorites()`)
 - Waits for the favorites grid, performs human-like scroll steps, and advances pagination when the DOM stabilizes
 - Collects visible media, groups cards by container ID for sequential numbering
-- Transforms preview/thumbnail URLs to original full-resolution URLs
 - Returns structured metadata used to build filenames
 
 ### Message Types
 - `CONTENT_READY` – Panel loaded, reset state
 - `REQUEST_STATE` – Panel requests current progress/history
 - `START_DOWNLOADS` – Begin download session
+- `FETCH_BLOB` – Background asks content script to fetch a URL with page cookies, returns blob URL
 - `STATUS` – Progress update from background to panel
 - `TOGGLE_PANEL` – Show/hide panel from extension icon click
 

@@ -28,7 +28,7 @@
   const title = document.createElement('h1');
   title.textContent = 'Grok Downloader';
   const subtitle = document.createElement('p');
-  subtitle.textContent = 'Solve any verification prompts on https://grok.com/imagine/favorites, then start the queue.';
+  subtitle.textContent = 'Solve any verification prompts on https://grok.com/imagine/saved, then start the queue.';
   titleWrap.appendChild(title);
   titleWrap.appendChild(subtitle);
 
@@ -285,6 +285,24 @@
       togglePanel();
       sendResponse?.({ ok: true });
       return true;
+    }
+    if (message?.type === 'FETCH_BLOB') {
+      // Fetch a URL with page credentials and return a blob URL.
+      // This is needed because assets.grok.com requires auth cookies that
+      // chrome.downloads.download() does not send from the service worker.
+      fetch(message.url, { credentials: 'include' })
+        .then((r) => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.blob();
+        })
+        .then((blob) => {
+          const blobUrl = URL.createObjectURL(blob);
+          sendResponse({ ok: true, blobUrl });
+        })
+        .catch((err) => {
+          sendResponse({ ok: false, error: err.message || 'Fetch failed' });
+        });
+      return true; // keep sendResponse channel open for async
     }
     if (message?.type === 'STATUS') {
       const timestamp = message.timestamp || Date.now();

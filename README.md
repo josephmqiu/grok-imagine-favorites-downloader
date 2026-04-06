@@ -10,6 +10,7 @@ A Chrome extension that scrolls through your [Grok Imagine](https://grok.com/ima
 - **Download Limit Control**: Optional limit input for quick smoke tests without pulling the whole library
 - **Media Type Filter**: Download all media, images only, or videos only
 - **Paired Filenames**: Media from the same favorite uses sequential numbering so related files stay grouped
+- **Authenticated Downloads**: Fetches files through the page context with your session cookies, then saves via Chrome's downloads API
 - **Privacy First**: No external network calls; everything runs in your logged-in browser session
 
 ## Installation
@@ -22,7 +23,7 @@ A Chrome extension that scrolls through your [Grok Imagine](https://grok.com/ima
 
 ## Usage
 
-1. Visit [https://grok.com/imagine/favorites](https://grok.com/imagine/favorites) and resolve any verification prompts
+1. Visit [https://grok.com/imagine/saved](https://grok.com/imagine/saved) and resolve any verification prompts
 2. Click the extension icon to open the side panel
 3. *(Optional)* Enable debug logs for verbose console output
 4. *(Optional)* Select media type filter (All, Images only, Videos only)
@@ -36,7 +37,7 @@ A Chrome extension that scrolls through your [Grok Imagine](https://grok.com/ima
 1. `background.js` validates the active tab, toggles debug mode, and executes `scrapeFavorites()` in-page
 2. The scraper performs human-like scrolling, pagination advances, and groups media by favorite card
 3. Queue preparation enforces unique filenames, pairs related media, and applies the optional limit
-4. The queue processor streams items through Chrome's downloads API with retry tracking and progress snapshots
+4. The queue processor fetches each file through the content script (with page cookies for authentication), then saves the blob via Chrome's downloads API with retry tracking and progress snapshots
 5. Failed downloads automatically retry up to 3 times with backoff before being marked as permanent failures
 
 ## Troubleshooting
